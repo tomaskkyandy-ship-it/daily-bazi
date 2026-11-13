@@ -3,7 +3,7 @@ name: 每日八字命理推算与Bark定时推送
 on:
   schedule:
     # 国际标准时间 (UTC) 23:00 = 北京时间 (UTC+8) 次日清晨 07:00
-    - cron: '0 23 * * *'
+    - cron: '5 23 * * *'
   workflow_dispatch: # 支持在 GitHub 网页上随时手动点击“Run workflow”一键测试
 
 jobs:
