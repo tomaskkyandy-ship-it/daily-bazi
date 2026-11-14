@@ -1,14 +1,17 @@
-name: 每日八字命理推算与Bark定时推送
+name: 每日八字命理推算与Bark定时推送 (v3.0)
 
 on:
   schedule:
-    # 国际标准时间 (UTC) 23:00 = 北京时间 (UTC+8) 次日清晨 07:00
-    - cron: '5 23 * * *'
-  workflow_dispatch: # 支持在 GitHub 网页上随时手动点击“Run workflow”一键测试
+    # 国际标准时间 (UTC) 19:47 = 北京时间 (UTC+8) 次日凌晨 03:47
+    # 彻底避开 GitHub 整点拥堵洪峰；即使遇 1~3 小时公共队列延迟也能在 07:00 前完成容器预热，
+    # 随后由引擎内置【云端准点锁 (--wait-until 07:00)】卡点至北京时间 07:00:00 零误差发射！
+    - cron: '47 19 * * *'
+  workflow_dispatch: # 支持在 GitHub 网页或外部 Webhook 随时手动触发即时推送
 
 jobs:
   daily-bazi-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
 
     steps:
       - name: 检出仓库代码 (Checkout Repository)
@@ -25,9 +28,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 执行每日命理推演并推送 Bark (Run Deduction & Push)
+      - name: 执行每日命理推演并准点推送 Bark (Run Deduction & Precision Push)
         env:
           BARK_KEY: ${{ secrets.BARK_KEY }}
           TZ: 'Asia/Shanghai'
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          python daily_bazi_engine.py --push
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            python daily_bazi_engine.py --push --wait-until 07:00
+          else
+            python daily_bazi_engine.py --push
+          fi
