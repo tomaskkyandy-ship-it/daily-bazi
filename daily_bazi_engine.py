@@ -1,30 +1,31 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-每日八字动态推演与智能推送引擎 (Daily Bazi Deduction & Push Engine) - v3.0 终极完全体
+每日八字动态推演与智能推送引擎 (Daily Bazi Deduction & Push Engine) - v3.1 全息知识库对齐版
 --------------------------------------------------------------------------------
 【理论基石】：
-  1. 《三命通会》（明·万民英）：骨肉躯干（干支刑冲合害、太岁岁破、神煞值日、五鼠遁起时法）
-  2. 《滴天髓》（清·任铁樵）：动力神经（五行旺衰力学、生克心理学、气象调候平衡）
-  3. 《了凡四训》（明·袁了凡）：知行闭环（每日功过格微习惯实修，化被动宿命为主动改命）
+  1. 《三命通会》（明·万民英）：骨肉躯干（干支刑冲合害、太岁岁破、月破、空亡出空、神煞值日、五鼠遁起时）
+  2. 《滴天髓》（清·任铁樵）：动力神经（五行旺衰力学、生克心理学、四象气象调候平衡）
+  3. 《了凡四训》（明·袁了凡）：知行闭环（100%对齐命主专属《五维立命功过格打卡表》加分与守戒体系）
   *(坚决剔除管十年社会阶层的《子平真诠》与管四时宏观调候的《穷通宝鉴》)*
 
-【v3.0 九大终极升级 (The 9 Ultimate Upgrades)】：
-  1. 消除文案覆盖 Bug：财运与感情状态采用优先级列表累加合成，严禁后规则抹除前规则的高危预警。
-  2. 日间吉时过滤 + 日破时一票否决：黄金效率时严格在日间活动窗口 (07:00-21:00) 择优，
-     且流时若与流日相冲（日破时）直接重扣 6 分剔除，夜间吉时单独作为静思复盘参考。
-  3. 纳入流年太岁维度：自动识别“岁破大耗日”（如丙午年逢子日冲太岁）与“岁日伏吟”。
-  4. 60甲子全天干、全地支、天干五合 100% 映射：补齐壬/甲/乙/丙/丁天干、寅/卯/丑/未地支、
-     甲己合/丁壬合等全部规则，彻底告别死板兜底文案。
-  5. 十年大运时间轴自适应：内置 1991-2060 完整大运表，2031年自动由【壬申】切换至【癸酉】。
-  6. 四象多维动态调候养生：结合流日五行与地支燥湿，细分为四大动态调候养生矩阵。
-  7. 《了凡四训》功过格每日微修行：根据当日十神与刑冲，自动生成破财化慈、忍辱止嗔等改命动作。
-  8. iOS Bark 原生高颜值纯文本排版：去除裸露的 ### 与 ** 符号，专为手机锁屏与通知阅读优化。
-  9. 动态分级提示音与时效穿透：RED 级自动启用 timeSensitive 突破勿扰模式 + 警示音。
+【v3.1 十五大终极特性 (v3.0 + 二次深度审查 6 大升级)】：
+  1. 多维断语列表叠加：财运与感情状态采用列表累积合成，严禁后规则覆盖前规则的高危预警。
+  2. 日间吉时窗口 (07:00-21:00) + 剔除日破/穿害凶时：杜绝半夜谈业务建议，自动补齐吉时命理依据标签。
+  3. 流年太岁（岁破/伏吟）+ 全年12个月通用【流月月破】锁存降级：杜绝在月破日盲目报喜。
+  4. 60甲子全天干、全地支、天干五合 100% 映射：补齐丁壬合、甲己合、戊癸合及全部刑冲破害。
+  5. 十年大运时间轴自适应：内置 1991-2080 完整大运表，2031年自动由【壬申】切换至【癸酉】。
+  6. 原局旬空（申酉食伤空亡、戌亥年空）出空填实 + 四大本命神煞（将星/华盖/驿马/文昌/禄神/桃花）联动。
+  7. 四象调候 100% 对齐《个人命运全息战略看板》：严禁出现红/紫/黄/咖及正南/西南等本命火土忌神。
+  8. 100% 对齐《了凡四训专属功过格打卡表》：每日精准派发【以智生金 +3分】【破除比劫 +5分】
+     【以柔克刚 +5分】【滋阴润水 +3分】【引火下行 +2分】及对应守戒底线。
+  9. iOS Bark 原生纯享排版 + 四级动态提示音与专注模式时效穿透 (timeSensitive)。
+ 10. 云端预热 + 07:00:00 零误差准点投递锁 (--wait-until 07:00) + 本地 Obsidian 自动幂等归档。
 ================================================================================
 """
 
 import os
+import re
 import sys
 import math
 import time
@@ -44,6 +45,7 @@ except ImportError:
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bark_config.json")
+OBSIDIAN_LOG_DIR = r"E:\obsidian仓库\坤哥的第二大脑\命理与运势\我的命盘\每日运势日志"
 
 
 def get_beijing_today() -> date:
@@ -73,16 +75,17 @@ class NativeProfile:
     hour_gan: str = "丁"
     hour_zhi: str = "巳"
 
+    # 原局旬空（空亡）
+    day_xunkong: List[str] = field(default_factory=lambda: ["申", "酉"])   # 戊寅日（甲戌旬）空亡在申酉
+    year_xunkong: List[str] = field(default_factory=lambda: ["戌", "亥"])  # 甲子年（甲子旬）空亡在戌亥
+
     # 命盘核心属性
     day_master: str = "戊"  # 戊土偏旺 (56.4分)
-    favorable_elements: List[str] = field(default_factory=lambda: ["金", "水"])
+    favorable_elements: List[str] = field(default_factory=lambda: ["金", "水", "木"])
     unfavorable_elements: List[str] = field(default_factory=lambda: ["火", "土"])
 
     def get_decade_luck(self, target_year: int) -> Tuple[str, str, str]:
-        """
-        根据流年年份动态返回命主当前所处的大运干支与周期说明
-        实现一次编写、终身跨运自适应
-        """
+        """根据流年年份动态返回命主当前所处的大运干支与周期说明（1991-2080）"""
         if target_year < 2001:
             return ("己", "巳", "1991-2000 己巳大运")
         elif target_year < 2011:
@@ -95,8 +98,12 @@ class NativeProfile:
             return ("癸", "酉", "2031-2040 癸酉大运")
         elif target_year < 2051:
             return ("甲", "戌", "2041-2050 甲戌大运")
-        else:
+        elif target_year < 2061:
             return ("乙", "亥", "2051-2060 乙亥大运")
+        elif target_year < 2071:
+            return ("丙", "子", "2061-2070 丙子大运")
+        else:
+            return ("丁", "丑", "2071-2080 丁丑大运")
 
 
 # ==============================================================================
@@ -131,6 +138,16 @@ ZHI_CLASH_MAP = {
     "卯": "酉", "酉": "卯",
     "辰": "戌", "戌": "辰",
     "巳": "亥", "亥": "巳"
+}
+
+# 地支六害双向映射表
+ZHI_HARM_MAP = {
+    "子": "未", "未": "子",
+    "丑": "午", "午": "丑",
+    "寅": "巳", "巳": "寅",
+    "卯": "辰", "辰": "卯",
+    "申": "亥", "亥": "申",
+    "酉": "戌", "戌": "酉"
 }
 
 # 天干相冲映射表
@@ -189,7 +206,7 @@ class SeverityLatch:
 
 
 # ==============================================================================
-# 4. 全动态天文与微观动力学引擎 (v3.0)
+# 4. 全动态天文与微观动力学引擎 (v3.1)
 # ==============================================================================
 class DailyBaziEngine:
     def __init__(self, profile: NativeProfile):
@@ -226,12 +243,12 @@ class DailyBaziEngine:
             "day_gz": lunar.getDayInGanZhiExact(),
         }
 
-    def calculate_wu_shu_dun_hours(self, day_gan: str, day_zhi: str, offset_minutes: float) -> List[Dict]:
+    def calculate_wu_shu_dun_hours(self, day_gan: str, day_zhi: str, month_zhi: str, offset_minutes: float) -> List[Dict]:
         """
-        五鼠遁日上起时公式全天扫描 (v3.0 升级版)：
-        1. 区分日间活动窗口 (07:00-21:00: 辰巳午未申酉戌) 与夜间休息窗口；
-        2. 增加“流时 vs 流日”相冲（日破凶时）与天克地冲的一票否决扣分；
-        3. 评估流时与原局的刑冲合会。
+        五鼠遁日上起时公式全天扫描 (v3.1 升级版)：
+        1. 区分日间活动窗口 (07:00-21:00: 辰巳午未申酉戌) 与夜间窗口；
+        2. 剔除“日破凶时”（流时冲流日），并对“流时害/刑流日”及“流时冲月令”进行减分与标注；
+        3. 自动补齐天干十神与地支合局标签，确保每个入选吉时都有清晰的命理依据。
         """
         start_gan_map = {
             "甲": "甲", "己": "甲",
@@ -268,52 +285,86 @@ class DailyBaziEngine:
             zhi_elem = ZHI_ELEMENTS[cur_zhi]
 
             score = 0
-            tags = []
+            good_tags = []
+            bad_tags = []
 
-            # 基础喜用加减分（戊土喜金水，忌火土）
-            if gan_elem in ["金", "水"]:
+            # 1. 时干喜忌与合化评估
+            if cur_gan == "癸":
+                score += 3
+                good_tags.append("戊癸合财")
+            elif cur_gan == "壬":
                 score += 2
+                good_tags.append("偏财透干")
+            elif cur_gan in ["庚", "辛"]:
+                score += 2
+                good_tags.append("食伤吐秀")
             elif gan_elem in ["火", "土"]:
                 score -= 1
 
+            # 2. 时支喜忌评估
             if zhi_elem in ["金", "水"]:
                 score += 2
             elif zhi_elem in ["火", "土"]:
                 score -= 1
 
-            # 天干戊癸合加分
-            if cur_gan == "癸":
+            # 3. 与原局四柱地支作用
+            if cur_zhi == "子":
                 score += 1
-                tags.append("戊癸合财")
-
-            # 与原局地支作用
-            if cur_zhi == "午":
-                score -= 3
-                tags.append("冲原局子水财星")
-            elif cur_zhi == "申":
-                score -= 1  # 申金合财局但冲日支寅木，净+1
-                tags.append("合财局但冲婚宫")
-            elif cur_zhi == "酉":
-                score += 1  # 辰酉六合金
-                tags.append("辰酉合金生财")
-            elif cur_zhi == "亥":
-                score += 1  # 寅亥六合
-                tags.append("寅亥六合")
+                good_tags.append("申子辰合财")
+            elif cur_zhi == "丑":
+                good_tags.append("天乙贵人")
+            elif cur_zhi == "卯":
+                score -= 1
+                bad_tags.append("卯辰穿财库")
+            elif cur_zhi == "辰":
+                if cur_gan in ["庚", "辛", "壬", "癸"]:
+                    good_tags.append("水库纳财")
+                else:
+                    bad_tags.append("辰辰自刑")
             elif cur_zhi == "巳":
                 score -= 2
-                tags.append("寅巳相刑")
+                bad_tags.append("寅巳相刑")
+            elif cur_zhi == "午":
+                score -= 3
+                bad_tags.append("冲原局子水财星")
+            elif cur_zhi == "未":
+                score -= 2
+                bad_tags.append("子未穿害正财")
+            elif cur_zhi == "申":
+                score -= 1  # 申金合财局但冲日支寅木
+                good_tags.append("文昌合财")
+                bad_tags.append("寅申冲婚宫")
+            elif cur_zhi == "酉":
+                score += 2  # 辰酉六合金大吉
+                good_tags.append("辰酉合金生财")
             elif cur_zhi == "戌":
-                score -= 1
-                tags.append("辰戌冲财库")
+                score -= 2
+                bad_tags.append("辰戌冲财库")
+            elif cur_zhi == "亥":
+                score += 1  # 寅亥六合
+                good_tags.append("寅亥合木润局")
 
-            # 【v3.0 核心纠偏】：检查“流时 vs 流日”是否相冲（日破时）或天克地冲
+            # 4. 【v3.1 核心纠偏】：流时与流日、流月的刑冲破害评估
             is_day_breaker = (ZHI_CLASH_MAP.get(cur_zhi) == day_zhi)
             if is_day_breaker:
-                score -= 6  # 日破凶时，一票否决重扣
+                score -= 6  # 日破凶时，一票否决
                 if GAN_CLASH_MAP.get(cur_gan) == day_gan:
-                    tags.append("与流日天克地冲·日破大凶")
+                    bad_tags.append("与流日天克地冲·日破大凶")
                 else:
-                    tags.append("冲犯流日·日破勿用")
+                    bad_tags.append("冲犯流日·日破勿用")
+            else:
+                # 检查流时是否穿害流日（如卯日辰时卯辰害）
+                if ZHI_HARM_MAP.get(cur_zhi) == day_zhi:
+                    score -= 2
+                    bad_tags.append(f"穿害流日({day_zhi}{cur_zhi}害)")
+                # 检查流时与流日是否子卯刑
+                if (cur_zhi == "子" and day_zhi == "卯") or (cur_zhi == "卯" and day_zhi == "子"):
+                    score -= 2
+                    bad_tags.append("与流日子卯相刑")
+                # 检查流时是否冲月令（月破时）
+                if ZHI_CLASH_MAP.get(cur_zhi) == month_zhi:
+                    score -= 2
+                    bad_tags.append(f"冲月令{month_zhi}")
 
             start_gy = self.format_solar_time(start_bj, offset_minutes)
             end_gy = self.format_solar_time(end_bj, offset_minutes)
@@ -328,7 +379,8 @@ class DailyBaziEngine:
                 "score": score,
                 "is_daytime": is_daytime,
                 "is_day_breaker": is_day_breaker,
-                "tags": tags,
+                "good_tags": good_tags,
+                "bad_tags": bad_tags,
                 "time_desc": time_desc
             })
 
@@ -336,10 +388,10 @@ class DailyBaziEngine:
 
     def evaluate_daily_interactions(self, lunar_data: Dict) -> Dict:
         """
-        核心动力学评估 (v3.0 升级版)：
-        1. 引入流年太岁维度（岁破、岁日并临）；
-        2. 动态适配大运干支（壬申/癸酉自动切换）；
-        3. 财运与感情文案采用优先级列表合成，彻底修复后规则覆盖前规则的 Bug；
+        核心动力学评估 (v3.1 升级版)：
+        1. 引入流年太岁（岁破、岁日伏吟）与全年12个月通用【流月月破】锁存；
+        2. 纳入原局旬空（申酉食伤空亡、戌亥年空）填实出空机制與《三命通会》四大本命神煞；
+        3. 财运与感情文案采用列表合成，彻底修复后规则覆盖前规则的 Bug；
         4. 全十天干 + 全十二地支 + 天干五合 100% 映射。
         """
         year_num = lunar_data["year"]
@@ -370,12 +422,11 @@ class DailyBaziEngine:
         noble_stars = []
         cautions = []
 
-        # 使用列表收集状态，杜绝覆盖丢失
         wealth_notes = []
         romance_notes = []
 
         # ----------------------------------------------------------------------
-        # 规则 0：流年太岁交互扫描（《三命通会》太岁当权法则）
+        # 规则 0：流年太岁（岁破/伏吟）与流月提纲（全年12月通用月破）前置锁存
         # ----------------------------------------------------------------------
         is_sui_po = (ZHI_CLASH_MAP.get(day_zhi) == year_zhi)
         if is_sui_po:
@@ -389,8 +440,17 @@ class DailyBaziEngine:
             score -= 8
             penalties.append(f"【岁日并临】：流日与流年同为{day_gz}，气场偏亢，凡事欲速则不达")
 
+        is_yue_po = (ZHI_CLASH_MAP.get(day_zhi) == month_zhi)
+        if is_yue_po:
+            latch.update("ORANGE", f"流日{day_zhi}冲犯月令提纲{month_zhi}（月破日）")
+            score -= 12
+            penalties.append(
+                f"【流月月破】：流日{day_zhi}遭当月月令{month_zhi}正冲（日犯月破，旺衰系数 {day_zhi_power:.2f}），气场震荡耗散，大事宜缓"
+            )
+            cautions.append("月破之日忌签署重大新约或激进调仓")
+
         # ----------------------------------------------------------------------
-        # 规则 1：十二地支全息动力学扫描（结合大运与原局四柱，12地支100%覆盖）
+        # 规则 1：十二地支全息动力学 + 旬空出空 + 本命神煞扫描（100%覆盖）
         # ----------------------------------------------------------------------
         if day_zhi == "午":
             latch.update("RED", "子午正冲，申子辰财局中神受损")
@@ -401,46 +461,50 @@ class DailyBaziEngine:
             cautions.append("严守钱包·拒绝对外借款担保")
 
         elif day_zhi == "子":
-            if not is_sui_po:
+            noble_stars.append("【将星值日】：年支将星临门，战略决断力与统御气魄强")
+            if not is_sui_po and not is_yue_po:
                 latch.update("BLUE", "三合财局中神填实")
                 score += round(20 * day_zhi_power)
                 combines.append("【申子辰合水】：流日子水引动三合水局，正财中神归位")
                 wealth_notes.append("三合财局中神填实，资金回流顺遂，极利复盘长线收息资产")
                 romance_notes.append("正财妻星得位，夫妻情感温润和睦，适合共同规划家用")
             else:
-                # 如 2026 丙午年逢子日：既合原局水局，又冲流年太岁午火
                 score += round(8 * day_zhi_power)
-                combines.append("【申子辰合水逢岁破】：流日子水虽聚原局财气，但正冲流年午火太岁（水火激战）")
-                wealth_notes.append("账面有财气联动或收益机会，但逢岁破耗散，切忌贪多冒进，落袋为安")
+                combines.append("【申子辰合水逢冲】：流日子水虽聚原局财气，但逢太岁或月令激冲（水火激战）")
+                wealth_notes.append("账面有财气联动或收益机会，但逢岁/月冲耗，切忌贪多冒进，宜落袋为安")
                 romance_notes.append("情缘互动活跃但易受外界长辈或琐事干扰，沟通宜低调温和")
 
         elif day_zhi == "申":
             latch.update("ORANGE", "申金长生位入局但冲克婚宫")
             score += round((15 - 20) * day_zhi_power)
             clashes.append("【寅申相冲 · 申入水局】：流日申金强化申子辰财局，但剧烈冲动日支寅木配偶宫")
-            wealth_notes.append("食神生财有动中求财或模型优化契机，但奔波劳碌，合同细节需反复核查")
-            romance_notes.append("【避吵避躁】婚宫受冲，伴侣间易因生活琐事起摩擦，宜聚少离多、少言多包容")
+            noble_stars.append("【文昌贵人 · 驿马星动 · 食伤出空】：戊土见申为文昌，且日柱申金空亡填实出空，利代码算法攻关与异地联动")
+            wealth_notes.append("食伤出空生财，技术攻关或模型优化灵感敏锐，但逢驿马奔波，合同细节需反复核查")
+            romance_notes.append("【避吵避躁】婚宫逢寅申驿马对冲，伴侣间易因生活琐事起摩擦，宜聚少离多、少言多包容")
             cautions.extend(["伴侣沟通防硬碰硬", "驾车出行防刮蹭"])
 
         elif day_zhi == "酉":
-            latch.update("BLUE", "辰酉六合金化食伤")
+            latch.update("BLUE", "辰酉六合金化食伤出空")
             score += round(20 * day_zhi_power)
             combines.append("【辰酉六合金】：流日酉金合动月令辰土，化生食伤金气，通关大吉！")
-            wealth_notes.append("食伤生财通关有力，AI长线选股逻辑敏锐，验证财务模型灵感爆发")
+            noble_stars.append("【食伤出空 · 咸池桃花】：日柱酉金空亡得六合填实出空，大补原局3.7%缺金短板，才思与人缘俱佳")
+            wealth_notes.append("伤官合化出空生财，AI长线选股逻辑极其通透，验证财务模型事半功倍")
             romance_notes.append("桃花合入月令，人际春风化雨，家庭相处温馨融洽")
 
         elif day_zhi == "辰":
             latch.update("ORANGE", "财库伏吟且辰辰自刑")
             score -= round(8 * day_zhi_power)
             penalties.append("【辰辰自刑 · 财库伏吟】：流日辰土逢月令辰土自刑伏吟，比劫重而锁水")
+            noble_stars.append("【华盖星值日】：月支华盖临门，心怀哲思，极利独处深耕算法与战略思考，忌无效社交应酬")
             wealth_notes.append("财库闭锁静守，账面流水平稳，忌主观情绪化调仓，耐心坚守长线周期")
-            romance_notes.append("内心易生闷气或固执己见，莫在细枝末节上与家人较真")
+            romance_notes.append("华盖逢自刑易生闷气或固执己见，莫在细枝末节上与家人较真")
             cautions.append("防自我纠结内耗")
 
         elif day_zhi == "戌":
             latch.update("ORANGE", "辰戌相冲动摇财库")
             score -= round(15 * day_zhi_power)
             clashes.append("【辰戌相冲】：流日戌土冲动月令辰土水库（财库大开）")
+            noble_stars.append("【年空填实】：甲子年柱戌土空亡填实，直接冲击月令提纲水库")
             wealth_notes.append("财库逢冲，账面资金进出波动大，利合规固定资产转换或还贷，严禁投机博弈")
             romance_notes.append("受寅午戌合火燥气牵引，脾气易急，家庭决策宜缓不宜急")
             cautions.append("大宗资金调动防误判")
@@ -448,7 +512,8 @@ class DailyBaziEngine:
         elif day_zhi == "巳":
             latch.update("ORANGE", "寅巳相刑暗生内耗")
             score -= round(12 * day_zhi_power)
-            penalties.append("【寅巳相刑】：流日巳火（日主禄神）与日支寅木构成恃势之刑")
+            penalties.append("【寅巳相刑】：流日巳火与日支寅木构成恃势之刑")
+            noble_stars.append("【建禄神值日】：戊土建禄在巳，立身根基稳固，唯须防火旺生燥")
             wealth_notes.append("禄神值日行事稳健，但火旺生土克水，投资宜静观其变，勿受外界焦虑渲染")
             romance_notes.append("婚宫逢寅巳相刑，容易表面客气内心较劲，切勿将工作压力带回餐桌")
             cautions.append("心平气和·忌挑剔抱怨")
@@ -457,13 +522,15 @@ class DailyBaziEngine:
             latch.update("BLUE", "寅亥六合和美生木")
             score += round(14 * day_zhi_power)
             combines.append("【寅亥六合 · 巳亥微冲】：流日亥水合美日支配偶宫，同时冲动时支巳火印星")
-            wealth_notes.append("偏财活水润局，利跨界思考、数据收集与资产稳健盘点")
+            noble_stars.append("【年空填实 · 偏财润局】：甲子年柱亥水空亡得寅亥六合填实，活水润泽命局")
+            wealth_notes.append("偏财活水填实润局，利跨界思考、数据收集与资产稳健盘点")
             romance_notes.append("婚宫得六合甘霖，家庭氛围和乐，易得伴侣体贴支持，多关注子女动态")
 
         elif day_zhi == "寅":
             latch.update("ORANGE", "日支婚宫伏吟且引动寅巳相刑")
             score -= round(10 * day_zhi_power)
             penalties.append("【日支伏吟 · 寅巳刑动】：流日寅木与日支伏吟，且冲大运申金、刑时支巳火")
+            noble_stars.append("【驿马星值日】：日支驿马星动，主公务繁忙、外出走动或跨区域协调")
             wealth_notes.append("七杀坐支伏吟，公务责任与心理紧迫感较强，按章程推进即可，忌替人扛雷")
             romance_notes.append("配偶宫伏吟引动相刑，双方主见皆强、互不相让，今日宜各自留足独处空间")
             cautions.extend(["切忌强加观点于家人", "注意肝胆与睡眠休息"])
@@ -472,6 +539,7 @@ class DailyBaziEngine:
             latch.update("ORANGE", "卯辰相害穿财库且子卯相刑")
             score -= round(12 * day_zhi_power)
             penalties.append("【卯辰相害 · 子卯相刑】：流日卯木害穿月令辰土财库，且与年支子水相刑")
+            noble_stars.append("【红鸾桃花带刑】：子年见卯为红鸾星动，人际异性缘旺但带子卯无礼之刑")
             wealth_notes.append("卯木穿害月令财库，需防合同条款暗坑、系统小故障或熟人背刺损耗")
             romance_notes.append("子卯无礼之刑带桃花，人际往来需注意言语分寸，伴侣间切莫翻旧账")
             cautions.append("审慎核对文书细节·谨守社交边界")
@@ -479,7 +547,7 @@ class DailyBaziEngine:
         elif day_zhi == "丑":
             score += round(5 * day_zhi_power)
             combines.append("【子丑合绊 · 辰丑微破】：流日丑土合住年支子水，与月令辰土相破")
-            noble_stars.append("天乙贵人（带子丑合绊与辰丑微破，有贵人引荐但资金兑现偏慢）")
+            noble_stars.append("【天乙贵人】：戊庚牛羊贵人登殿（带子丑合绊，有贵人引荐但资金兑现偏慢）")
             wealth_notes.append("湿土蓄水，虽有贵人信息或长期合作洽谈，但资金易被合绊锁定，宜慢工出细活")
             romance_notes.append("感情稳定务实，但表达略显木讷沉闷，不妨主动给家人带份小礼物")
 
@@ -487,7 +555,7 @@ class DailyBaziEngine:
             latch.update("ORANGE", "子未相害穿伤正财且辰未比劫刑墓")
             score -= round(12 * day_zhi_power)
             penalties.append("【子未相害】：流日未土燥气穿害年支子水正财，比劫争锋")
-            noble_stars.append("天乙贵人（受子未穿害降级为虚浮贵人，谨防熟人好心办坏事或道德绑架）")
+            noble_stars.append("【天乙贵人（虚浮降级）】：受子未穿害降级，谨防熟人好心办坏事或道德绑架")
             wealth_notes.append("正财源受未土穿害，人情往来或家庭琐事开销易超支，忌听信熟人投资建议")
             romance_notes.append("子未相害易生无名委屈或隔阂，对伴侣多一分耐心，少一分说教")
             cautions.append("防人情绑架与无效社交消耗")
@@ -499,7 +567,8 @@ class DailyBaziEngine:
         # 规则 2：十天干与天干五合深度心理映射（10天干100%覆盖，追加不覆盖）
         # ----------------------------------------------------------------------
         if day_gan == "癸":
-            latch.update("BLUE", "戊癸天合正财归身")
+            if not is_yue_po and not is_sui_po:
+                latch.update("BLUE", "戊癸天合正财归身")
             score += round(18 * day_gan_power)
             combines.append("【戊癸天合】：流日癸水正财与日主戊土正合（正财归位，夫妻同心）")
             wealth_notes.append("天干戊癸正合，财气主动来合，商务契约、股息分红或正职收益顺遂")
@@ -550,17 +619,15 @@ class DailyBaziEngine:
             wealth_notes.append("丁火正印透出，心态仁厚沉稳，利阅读充电与长远规划，忌依赖拖延")
 
         # ----------------------------------------------------------------------
-        # 规则 3：流月月令衰旺精准定性（严格区分月破与水火克战）
+        # 规则 3：流月水火克战与土旺克水微调（非月破场景补充）
         # ----------------------------------------------------------------------
-        if month_zhi == "亥" and day_zhi == "巳":
-            penalties.append(f"【流月月破】：流日巳火遭月令亥水正冲（月破之日，旺衰仅 {day_zhi_power:.2f}），身心防虚火与倦怠")
-            score -= 10
-        elif month_zhi == "子" and day_zhi == "午":
-            penalties.append(f"【流月月破】：流日午火遭月令子水正冲（月破之日，旺衰仅 {day_zhi_power:.2f}），财源剧震防亏损")
-            score -= 10
-        elif (month_zhi == "亥" and day_zhi == "午") or (month_zhi == "子" and day_zhi == "巳"):
-            penalties.append(f"【月令水火克战】：流日火气受当令水气压制（旺衰系数 {day_zhi_power:.2f}），情绪易急躁不宁")
-            score -= 5
+        if not is_yue_po:
+            if (month_zhi == "亥" and day_zhi == "午") or (month_zhi == "子" and day_zhi == "巳"):
+                penalties.append(f"【月令水火克战】：流日火气受当令水气压制（旺衰系数 {day_zhi_power:.2f}），情绪易急躁不宁")
+                score -= 5
+            elif month_zhi in ["辰", "戌", "丑", "未"] and day_zhi in ["亥", "子"]:
+                penalties.append(f"【月令土旺克水】：四季土月比劫当令，流日财星受制（旺衰系数 {day_zhi_power:.2f}），求财宜守正莫贪快")
+                score -= 4
 
         # ----------------------------------------------------------------------
         # 规则 4：合成最终文本与星级封顶
@@ -602,78 +669,89 @@ class DailyBaziEngine:
             "noble_stars": noble_stars,
             "wealth_status": wealth_status,
             "romance_status": romance_status,
-            "cautions": list(dict.fromkeys(cautions))  # 去重保序
+            "cautions": list(dict.fromkeys(cautions))
         }
 
     def calculate_fengshui_and_liaofan(self, lunar_data: Dict, eval_data: Dict) -> Dict:
         """
-        【v3.0 升级】：
-        1. 四象多维动态调候养生矩阵（告别二元一刀切）；
-        2. 联动 Obsidian《了凡四训》功过格知识结点，生成每日专属改命实修微动作。
+        【v3.1 核心升级】：
+        1. 四象调候矩阵 100% 对齐《个人命运全息战略看板》：只取金、水、木喜用色与吉方，
+           彻底剔除红/紫/暖棕（火土忌色）与正南/西南（火土忌方）；
+        2. 100% 对齐《了凡四训专属功过格打卡表》五维立命体系，输出精准积分 (+5/+3/+2分) 与守戒项。
         """
         day_zhi = lunar_data["day_gz"][1]
         ten_god = eval_data["ten_god"]
         level = eval_data["alert_level"]
 
-        # 1. 四象动态调候矩阵
+        # 1. 四象动态调候矩阵（严格遵循喜金水木、忌火土原则）
         if day_zhi in ["巳", "午", "戌", "未"]:
-            # 燥烈火土象：急需强金化燥生水
+            # 燥烈火土象：急需强金泄燥土、真水润局（严禁红紫黄咖与正南西南）
             fs = {
-                "colors": "纯白、雪花银、冷浅灰（五行强金，泄燥土生真水）",
-                "numbers": "4、9（金数，强化冷静理性决断）",
-                "directions": "正西、西北方（金水旺位，利降燥静思与风控把关）",
-                "health_tip": "今日火土燥气偏盛，易口干舌燥、胃脘胀满或心火浮越；宜饮温白开或淡菊花茶，午间静坐闭目15分钟。"
+                "colors": "纯白、雪花银、冰川灰（强金泄燥土生真水，严忌红紫黄咖）",
+                "numbers": "4、9、1（金水联动数，强化冷静理性风控）",
+                "directions": "正西、西北、正北方（金水旺位，严避正南与西南）",
+                "health_tip": "今日火土燥气偏盛，易口干舌燥、胃脘胀满或心火浮越；晨起空腹饮300ml温水，午间闭目静坐15分钟引火归元。"
             }
         elif day_zhi in ["辰", "丑"]:
-            # 湿土困水象：需金疏土、引水出库
+            # 湿土蓄水/墓库象：需金疏厚土、引水出库
             fs = {
-                "colors": "曜石黑、深藏青搭配金属银饰（金水相生，疏通财库）",
-                "numbers": "1、6、4（水金联动数，促资金与思路流转）",
-                "directions": "正北、正西方（利盘活存量资产与深度研报复盘）",
-                "health_tip": "湿土当值易脾胃运化迟滞、肢体困重；饮食宜少甜少油腻，傍晚快走或拉伸以助阳气升发。"
+                "colors": "曜石黑、深藏青搭配银白金属饰品（金疏厚土，引水出库）",
+                "numbers": "1、6、4（水金通关数，促思路与资产流转）",
+                "directions": "正北、正西、东南方（利盘活存量资产与深度研报复盘）",
+                "health_tip": "湿土当值易脾胃运化迟滞、肢体困重；饮食宜少甜少油腻，傍晚快走或深长腹式呼吸以助肺金之气。"
             }
         elif day_zhi in ["寅", "卯"]:
-            # 官杀木旺克土象：需印星通气、食伤制衡
+            # 官杀木旺象：以金裁木、以水润木，化杀生威（绝不用火土忌神色方）
             fs = {
-                "colors": "米白、珍珠灰点缀暖棕/暗红（金火既济，化杀生威）",
-                "numbers": "4、9、2（平衡刚柔，稳固心神）",
-                "directions": "正西、西南方（利跨部门协调与压力释放）",
-                "health_tip": "木气偏旺克伐脾土，易出现肩颈紧绷、肝气郁结或睡眠浅；晚间宜热水泡脚，忌睡前思虑过重。"
+                "colors": "银白、珍珠灰搭配松石绿或深海蓝（金水木流通，化杀生财）",
+                "numbers": "4、9、3（金木平衡数，稳固心神与决断力）",
+                "directions": "正西、西北、正东方（利跨部门协调、法务合规与压力释放）",
+                "health_tip": "木气偏旺克伐脾土，易肩颈紧绷、肝气郁结或睡眠浅；宜到林木开阔处散步舒肝，睡前温水泡脚远离电子屏。"
             }
         else:
             # 申、酉、亥、子：金白水清象（喜用当令）
             fs = {
-                "colors": "深海蓝、商务黑、香槟金（顺应金水喜神，聚拢正财）",
-                "numbers": "1、6（北方真水数，利长线复利聚库）",
-                "directions": "正北、西北方（今日财神与贵人吉方，利重大决策）",
-                "health_tip": "金水流通气血顺畅，精力较为充沛；注意腰膝保暖勿受凉风，适度有氧运动可得神清气爽。"
+                "colors": "深海蓝、商务黑、香槟银（顺应金水喜神，聚拢正偏财气）",
+                "numbers": "1、6、9（金水相生数，利长线复利聚库）",
+                "directions": "正北、西北、正西方（今日财神与贵人吉方，利核心决策）",
+                "health_tip": "金水流通气血顺畅，精力较为充沛；注意呼吸道卫外与腰膝保暖，适度慢跑或太极可得神清气爽。"
             }
 
-        # 2. 《了凡四训》功过格每日微修行映射
-        if day_zhi in ["午", "戌"] or ten_god in ["比肩", "劫财"]:
-            liaofan_action = "【破财化慈 · 主动布施】：今日有比劫夺财或冲库之象。宜主动为家人买单、请同事喝茶或做一笔小额公益捐赠，以“欢喜主动散财”应验气数，破除被动漏财（行此善举，功过格记一功）。"
-        elif day_zhi in ["辰", "丑"]:
-            liaofan_action = "【释执宽心 · 纳言省身】：今日湿土伏吟或墓库当值，易生固执闷气或困于牛角尖。今日刻意听取伴侣或同事的一个不同建议而不反驳，主动放下内耗执念（转念释怀一次，功过格记一功）。"
-        elif day_zhi in ["申", "巳", "寅", "卯"] or level in ["ORANGE", "RED"]:
-            liaofan_action = "【忍辱止嗔 · 柔语护家】：今日地支带刑害交锋，心火易起。遇伴侣唠叨或外人意见相左时，心中默念三遍“退一步海阔天空”，咽下一句生硬反驳，温和回应（忍过一次嗔怒，功过格记一功）。"
-        elif day_zhi in ["酉", "亥", "子"] or ten_god in ["食神", "伤官", "正财", "偏财"]:
-            liaofan_action = "【惜福精进 · 守正笃行】：今日金水喜神得力。宜专注打磨 AI 长线投资体系 1 小时，屏蔽短线噪音；晚间向伴侣或父母道一句贴心问候，惜福培福（专心致志，功过格记一功）。"
+        # 2. 100% 对齐《了凡四训·专属立命功过格打卡表》五维积分与守戒体系
+        day_gan = lunar_data["day_gz"][0]
+        if day_zhi in ["午", "戌", "未"] or ten_god in ["比肩", "劫财"]:
+            liaofan_good = "【破除比劫 · 财布施 (+5分)】：今日有群比争财或冲库之象。宜主动为家人买单、欢喜请同事喝茶或做一笔小额公益捐赠，以“主动舍财”应验并化解被动破耗。"
+            liaofan_precept = "【今日守戒 (-5分)】：戒起贪小便宜心、戒计较微利得失、严禁借贷投机与替人担保。"
+        elif day_zhi in ["申", "寅", "巳", "卯"]:
+            liaofan_good = "【以柔克刚 · 和睦家庭 (+5分)】：今日地支引动婚宫或寅巳申卯刑冲。宜真诚赞美伴侣的操劳付出，遇琐碎唠叨微笑倾听、主动低头包容，不起争执。"
+            liaofan_precept = "【今日守戒 (-5分)】：戒在家庭中说教争辩对错、戒冷战生闷气或将职场火气带回家。"
+        elif day_zhi in ["酉", "辰", "丑"] or ten_god in ["食神", "伤官"]:
+            chen_note = "（破辰辰自刑）" if day_zhi == "辰" else ""
+            liaofan_good = "【以智生金 · 法布施 (+3分)】：今日宜补足原局 3.7% 食伤金气或以金疏土。专注打磨 AI 长线选股模型、输出专业认知文档，或耐心解答同仁疑问、成人之美。"
+            liaofan_precept = f"【今日守戒 (-3分)】：戒固执己见钻牛角尖{chen_note}、戒吝法闭门或言语狂傲锋芒。"
+        elif day_zhi in ["亥", "子"] or ten_god in ["正财", "偏财"]:
+            ren_note = "（破丁壬暗合）" if day_gan == "壬" else ""
+            liaofan_good = "【滋阴润水 · 养生固本 (+3分)】：今日财星活水当值。晨起空腹饮温水 300ml，专心致志看护长线高股息资产，晚间 23:00 前安眠以涵养肾水。"
+            liaofan_precept = f"【今日守戒 (-3分)】：戒受外界短期暴富噪音诱惑而心猿意马{ren_note}、戒熬夜刷屏透支精气。"
         else:
-            liaofan_action = "【敬事松肩 · 功不唐捐】：今日气场中和。完成一件搁置已久的小事，允许自己不必事事完美，把紧绷的肩膀沉下来，夜间23点前安然入睡（修身养神，功过格记一功）。"
+            liaofan_good = "【引火下行 · 息心安神 (+2分)】：今日印星或火土气盛。晚间宜用温水泡脚、止语静坐 15 分钟调顺腹式呼吸，把紧绷的肩膀彻底沉下来。"
+            liaofan_precept = "【今日守戒 (-2分)】：戒睡前胡思乱想过度内耗、戒急躁动怒引动虚火亢盛。"
 
-        fs["liaofan_action"] = liaofan_action
+        fs["liaofan_good"] = liaofan_good
+        fs["liaofan_precept"] = liaofan_precept
         return fs
 
     def generate_daily_report(self, target_date: date) -> Dict:
         lunar_data = self.get_lunar_day_data(target_date)
         day_gan = lunar_data["day_gz"][0]
         day_zhi = lunar_data["day_gz"][1]
+        month_zhi = lunar_data["month_gz"][1]
 
         eval_data = self.evaluate_daily_interactions(lunar_data)
         total_offset = self.calculate_total_solar_offset_minutes(target_date)
-        hours_data = self.calculate_wu_shu_dun_hours(day_gan, day_zhi, total_offset)
+        hours_data = self.calculate_wu_shu_dun_hours(day_gan, day_zhi, month_zhi, total_offset)
 
-        # 【v3.0 核心升级】：黄金效率时与避冲时严格在日间活动窗口 (07:00-21:00) 内筛选
+        # 黄金效率时与避冲时严格在日间活动窗口 (07:00-21:00) 内筛选
         daytime_hours = [h for h in hours_data if h["is_daytime"] and not h["is_day_breaker"]]
         if not daytime_hours:
             daytime_hours = [h for h in hours_data if h["is_daytime"]]
@@ -687,11 +765,13 @@ class DailyBaziEngine:
         # 检查晚间（亥时 21:00-23:00）是否为高分静思吉时
         hai_hour = [h for h in hours_data if h["zhi_name"] == "亥时"][0]
         night_bonus_str = ""
+        hai_tags_str = ""
         if hai_hour["score"] >= 3 and not hai_hour["is_day_breaker"]:
-            night_bonus_str = f"\n* **🌙 晚间复盘吉时**：亥时（{hai_hour['gan_zhi']} · {hai_hour['time_desc']}） —— 水气润局，宜静心阅读或复盘模型。"
+            hai_tags_str = f" [{'/'.join(hai_hour['good_tags'])}]" if hai_hour["good_tags"] else ""
+            night_bonus_str = f"\n* **🌙 晚间复盘吉时**：亥时（{hai_hour['gan_zhi']}{hai_tags_str} · {hai_hour['time_desc']}） —— 水气润局，宜静心阅读或复盘模型。"
 
-        best_tags = f" [{'/'.join(best_hour['tags'])}]" if best_hour["tags"] else ""
-        worst_tags = f" [{'/'.join(worst_hour['tags'])}]" if worst_hour["tags"] else ""
+        best_tags = f" [{'/'.join(best_hour['good_tags'])}]" if best_hour["good_tags"] else ""
+        worst_tags = f" [{'/'.join(worst_hour['bad_tags'])}]" if worst_hour["bad_tags"] else ""
 
         golden_hour_str = f"{best_hour['zhi_name']}（{best_hour['gan_zhi']}{best_tags} · {best_hour['time_desc']}）"
         caution_hour_str = f"{worst_hour['zhi_name']}（{worst_hour['gan_zhi']}{worst_tags} · {worst_hour['time_desc']}）"
@@ -739,18 +819,19 @@ class DailyBaziEngine:
 * **🌟 日间黄金效率时**：{golden_hour_str} —— 头脑最清晰，利深度研究、推演模型与关键决策。
 * **⚠️ 日间慎言避冲时**：{caution_hour_str} —— 气场激荡易生分歧，宜静坐喝茶、少做重大决断。{night_bonus_str}
 
-### ⚠️ 【今日避坑清单】
+### ⚠️ 【今日避坑清单与神煞交会】
 * **星曜交会**：{events_str}
 * **核心防线**：{cautions_str}
 
-### 🎨 【能量开运与五行调候】
+### 🎨 【能量开运与五行调候 (严守喜用·忌火土)】
 * **幸运穿搭**：{fs_energy['colors']}
 * **幸运数字**：{fs_energy['numbers']}
 * **大吉方位**：{fs_energy['directions']}
 * **身心调理**：{fs_energy['health_tip']}
 
-### 📖 【了凡四训 · 今日功过格微修行】
-* {fs_energy['liaofan_action']}
+### 📿 【了凡四训 · 专属立命功过格打卡】
+* **🌸 今日积善**：{fs_energy['liaofan_good']}
+* **🥀 今日守戒**：{fs_energy['liaofan_precept']}
 
 ---
 
@@ -759,7 +840,7 @@ class DailyBaziEngine:
 """
 
         # 2. 生成专为 iOS Bark 原生通知优化的高颜值纯文本卡片（无裸露 ### 与 ** 符号）
-        night_bark_line = f"\n🌙 晚间复盘：{hai_hour['zhi_name']}（{hai_hour['gan_zhi']} · {hai_hour['time_desc']}）" if night_bonus_str else ""
+        night_bark_line = f"\n🌙 晚间复盘：{hai_hour['zhi_name']}（{hai_hour['gan_zhi']}{hai_tags_str} · {hai_hour['time_desc']}）" if night_bonus_str else ""
         bark_clean_body = f"""{badge} {stars_str} (能量分: {eval_data['score_num']})
 📅 {lunar_data['solar_date']} ({lunar_data['year_gz']}年 {lunar_data['month_gz']}月 {lunar_data['day_gz']}日 · 农历{lunar_data['lunar_text']})
 🧭 值日：{eval_data['ten_god']}透出（属{eval_data['day_element']} · 月令加权 {eval_data['gan_power']:.2f}）
@@ -776,7 +857,7 @@ class DailyBaziEngine:
 🌟 黄金效率：{golden_hour_str}
 ⚠️ 慎言避冲：{caution_hour_str}{night_bark_line}
 
-⚠️【今日避坑雷达】
+⚠️【今日避坑与神煞雷达】
 • 交会：{events_str}
 • 防线：{cautions_str}
 
@@ -785,18 +866,73 @@ class DailyBaziEngine:
 • 数字：{fs_energy['numbers']} ｜ 方位：{fs_energy['directions']}
 • 养生：{fs_energy['health_tip']}
 
-📖【了凡四训 · 今日微修行】
-• {fs_energy['liaofan_action']}
+📿【了凡四训 · 功过格打卡】
+🌸 {fs_energy['liaofan_good']}
+🥀 {fs_energy['liaofan_precept']}
 ━━━━━━━━━━━━━━━━━━
 🧘‍♂️ {quote}"""
 
         return {
+            "date_str": lunar_data["solar_date"],
             "title": f"📅 今日运势 · {lunar_data['day_gz']}日 {badge[:9]}",
             "body_md": md_content.strip(),
             "body_bark": bark_clean_body.strip(),
             "summary": f"【今日运势】{lunar_data['day_gz']}日 {badge} {eval_data['wealth_status'][:16]}...",
             "level": eval_data["alert_level"]
         }
+
+    @staticmethod
+    def archive_to_obsidian(report: Dict, log_dir: str = OBSIDIAN_LOG_DIR) -> Optional[str]:
+        """
+        将当日生成的标准 Markdown 运势报告自动幂等归档至本地 Obsidian 仓库：
+        按月归档为 `YYYY-MM_每日运势日志.md`，同一天多次运行会自动更新当天的段落而不重复堆叠。
+        若在云端 Linux 容器运行（不存在本地 Obsidian 路径），则静默跳过。
+        """
+        parent_dir = os.path.dirname(log_dir)
+        if not os.path.exists(parent_dir):
+            return None
+
+        os.makedirs(log_dir, exist_ok=True)
+        date_str = report["date_str"]
+        ym_str = date_str[:7]
+        file_path = os.path.join(log_dir, f"{ym_str}_每日运势日志.md")
+
+        section_header = f"<!-- BAZI_LOG_START:{date_str} -->"
+        section_footer = f"<!-- BAZI_LOG_END:{date_str} -->"
+        new_block = f"{section_header}\n{report['body_md']}\n{section_footer}\n"
+
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                existing = f.read()
+            pattern = re.compile(
+                re.escape(section_header) + r".*?" + re.escape(section_footer) + r"\n?",
+                re.DOTALL
+            )
+            if pattern.search(existing):
+                updated = pattern.sub(new_block, existing)
+            else:
+                updated = existing.rstrip() + "\n\n---\n\n" + new_block
+        else:
+            doc_title = f"""---
+title: {ym_str} 每日八字运势与功过格实修日志
+tags:
+  - 命理/每日运势日志
+  - 修身/了凡四训
+created: {date_str}
+---
+
+# 🗓️ {ym_str} 每日八字运势与功过格实修日志
+
+> 本日志由 `daily_bazi_engine.py (v3.1)` 自动推演归档，联动 [[了凡四训专属功过格打卡表]] 与 [[我的命盘全息战略看板_戊元神_19840414]]。
+
+---
+
+{new_block}"""
+            updated = doc_title
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(updated)
+        return file_path
 
 
 # ==============================================================================
@@ -836,7 +972,6 @@ class BarkPusher:
             print("[Info] Bark Key 未设置，跳过网络推送。")
             return False
 
-        # 根据风险等级动态匹配铃声与 iOS 通知优先级
         sound_map = {
             "RED": ("alarm", "timeSensitive"),     # 红色高危：突破勿扰模式 + 警报音
             "ORANGE": ("glass", "timeSensitive"),  # 橙色防范：时效性通知 + 清脆提示音
@@ -886,7 +1021,7 @@ class BarkPusher:
 # ==============================================================================
 def wait_until_beijing_time(target_hm: str):
     """
-    【v3.0 零误差准点投递保障】：
+    【v3.1 零误差准点投递保障】：
     为应对 GitHub Actions 公共 Runner 队列延迟（通常 15~180 分钟），
     允许云端 Cron 提前唤醒容器预热环境，然后精确休眠对齐至北京时间 target_hm (如 07:00) 准秒发射。
     若因极端排队唤醒时已超过 target_hm，则不等待立即推送。
@@ -911,7 +1046,7 @@ def wait_until_beijing_time(target_hm: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="每日八字动态推演与Bark智能推送引擎 v3.0")
+    parser = argparse.ArgumentParser(description="每日八字动态推演与Bark智能推送引擎 v3.1")
     parser.add_argument("--push", action="store_true", help="生产定时模式：推演今日运势并推送Bark")
     parser.add_argument("--wait-until", type=str, default="", help="云端准点锁：等待至指定北京时间 (HH:MM) 再发射推送")
     parser.add_argument("--test", action="store_true", help="测试模式：执行多流日全息压力测试")
@@ -930,18 +1065,13 @@ def main():
 
     if args.test:
         print("=" * 80)
-        print("【每日八字动态推演引擎 v3.0 终极完全体】跨流日全息压力验证")
+        print("【每日八字动态推演引擎 v3.1 全息知识库对齐版】跨流日全息压力验证")
         print("=" * 80)
-        # 验证：
-        # 1. 2026-11-13 (辛卯日: 检验卯酉日破时是否被成功过滤 + 卯辰穿害财库)
-        # 2. 2026-11-15 (癸巳日: 检验戊癸合 + 寅巳刑 + 日间吉时过滤子时)
-        # 3. 2026-11-19 (丁酉日: 检验辰酉合金大吉日)
-        # 4. 2026-11-26 (甲辰日 -> 或选戊午日 2026-12-10 检验子午冲不被戊土覆盖)
         test_dates = [
-            date(2026, 11, 13),  # 辛卯日
-            date(2026, 11, 14),  # 壬辰日 (今日：检验丁壬合 + 辰辰自刑)
-            date(2026, 11, 15),  # 癸巳日
-            date(2026, 12, 10),  # 戊午日 (检验子午冲RED预警不被戊土比肩覆盖)
+            date(2026, 11, 13),  # 辛卯日 (检验卯酉日破过滤 + 卯辰穿害时辰减分 + 红鸾桃花 + 以柔克刚+5分)
+            date(2026, 11, 14),  # 壬辰日 (今日：检验华盖值日 + 丁壬暗合 + 辰辰自刑 + 以智生金+3分)
+            date(2026, 11, 19),  # 丁酉日 (检验辰酉合金 + 食伤酉金出空填实大吉 + 以智生金+3分)
+            date(2026, 12, 10),  # 戊午日 (检验子午正冲 + 子月午日月破双重锁定 + 破除比劫+5分)
         ]
         for d in test_dates:
             report = engine.generate_daily_report(d)
@@ -957,6 +1087,9 @@ def main():
             return
         report = engine.generate_daily_report(target_d)
         print(report["body_bark"])
+        archived = engine.archive_to_obsidian(report)
+        if archived:
+            print(f"📓 已自动归档至 Obsidian: {archived}")
         if args.push:
             pusher.push(report["title"], report["body_bark"], alert_level=report["level"])
         return
@@ -971,6 +1104,10 @@ def main():
     print("=" * 80)
     print(report["body_bark"])
     print("-" * 80)
+
+    archived = engine.archive_to_obsidian(report)
+    if archived:
+        print(f"📓 今日运势 Markdown 已自动幂等归档至 Obsidian: {archived}")
 
     pushed = pusher.push(report["title"], report["body_bark"], alert_level=report["level"])
     if pushed:
