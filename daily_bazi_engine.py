@@ -158,6 +158,29 @@ GAN_CLASH_MAP = {
     "丁": "癸", "癸": "丁"
 }
 
+# v4.0 新增：每日日干财神 / 喜神(桃花) / 阳贵人方位表（《协纪辨方书》正统起例）
+DAY_GAN_GOD_DIRECTIONS = {
+    "甲": {"wealth": "东北", "joy": "东北", "noble": "西南"},
+    "乙": {"wealth": "东北", "joy": "西北", "noble": "正北"},
+    "丙": {"wealth": "正西", "joy": "西南", "noble": "正西"},
+    "丁": {"wealth": "正西", "joy": "正南", "noble": "西北"},
+    "戊": {"wealth": "正北", "joy": "东南", "noble": "东北"},
+    "己": {"wealth": "正北", "joy": "东北", "noble": "正北"},
+    "庚": {"wealth": "正东", "joy": "西北", "noble": "东北"},
+    "辛": {"wealth": "正东", "joy": "西南", "noble": "正南"},
+    "壬": {"wealth": "正南", "joy": "正南", "noble": "正东"},
+    "癸": {"wealth": "正南", "joy": "东南", "noble": "东南"},
+}
+
+# v4.0 新增：洛书九宫顺飞轨迹与方位名称（用于玄空流月紫白飞星）
+LUOSHU_PALACE_ORDER = [5, 6, 7, 8, 9, 1, 2, 3, 4]
+PALACE_DIR_NAME = {
+    1: "正北(坎)", 2: "西南(坤)", 3: "正东(震)", 4: "东南(巽)",
+    5: "中宫", 6: "西北(乾)", 7: "正西(兑)", 8: "东北(艮)", 9: "正南(离)"
+}
+MONTH_ZHI_INDEX = {"寅": 1, "卯": 2, "辰": 3, "巳": 4, "午": 5, "未": 6,
+                   "申": 7, "酉": 8, "戌": 9, "亥": 10, "子": 11, "丑": 12}
+
 # 月令五行旺衰系数表 (Wang-Xiang-Xiu-Qiu-Si)
 MONTH_ENERGY_COEFFICIENT = {
     "寅": {"木": 1.30, "火": 1.15, "水": 0.85, "金": 0.70, "土": 0.55},
@@ -741,8 +764,58 @@ class DailyBaziEngine:
         fs["liaofan_precept"] = liaofan_precept
         return fs
 
+    def calculate_monthly_flying_stars(self, year_zhi: str, month_zhi: str) -> Dict:
+        """
+        v4.0 新增：玄空流月紫白飞星精确推算
+        口诀：子午卯酉年正月起八白，辰戌丑未年正月起五黄，寅申巳亥年正月起二黑，逐月逆飞入中宫，九宫顺布。
+        """
+        if year_zhi in ("子", "午", "卯", "酉"):
+            jan_center = 8
+        elif year_zhi in ("辰", "戌", "丑", "未"):
+            jan_center = 5
+        else:
+            jan_center = 2
+
+        m_idx = MONTH_ZHI_INDEX.get(month_zhi, 1)
+        center_star = ((jan_center - (m_idx - 1) - 1) % 9) + 1
+
+        # 顺飞入九宫
+        star_to_dir = {}
+        palace_to_star = {}
+        for offset, palace in enumerate(LUOSHU_PALACE_ORDER):
+            s = ((center_star + offset - 1) % 9) + 1
+            star_to_dir[s] = PALACE_DIR_NAME[palace]
+            palace_to_star[palace] = s
+
+        return {
+            "center_star": center_star,
+            "palace_to_star": palace_to_star,
+            "yi_bai_dir": star_to_dir[1],   # 一白贪狼（正财活水/桃花人缘）
+            "liu_bai_dir": star_to_dir[6],  # 六白武曲（偏财贵人/权位）
+            "si_lv_dir": star_to_dir[4],    # 四绿文曲（文昌创作/AI模型）
+            "wu_huang_dir": star_to_dir[5], # 五黄大煞（本月忌动土）
+            "er_hei_dir": star_to_dir[2],   # 二黑病符（本月忌阴湿杂乱）
+        }
+
+    def get_daily_god_directions(self, day_gan: str) -> Dict:
+        """v4.0 新增：当日财神/喜神/贵人方位（附本命火土忌方风控提示）"""
+        raw = DAY_GAN_GOD_DIRECTIONS.get(day_gan, {"wealth": "正北", "joy": "正西", "noble": "西北"})
+        def _annotate(d: str) -> str:
+            if d in ("正南", "西南"):
+                return f"{d}(落本命火土忌方·宜借不强催)"
+            return d
+        return {
+            "wealth_raw": raw["wealth"],
+            "joy_raw": raw["joy"],
+            "noble_raw": raw["noble"],
+            "wealth": _annotate(raw["wealth"]),
+            "joy": _annotate(raw["joy"]),
+            "noble": _annotate(raw["noble"]),
+        }
+
     def generate_daily_report(self, target_date: date) -> Dict:
         lunar_data = self.get_lunar_day_data(target_date)
+        year_zhi = lunar_data["year_gz"][1]
         day_gan = lunar_data["day_gz"][0]
         day_zhi = lunar_data["day_gz"][1]
         month_zhi = lunar_data["month_gz"][1]
@@ -750,14 +823,17 @@ class DailyBaziEngine:
         eval_data = self.evaluate_daily_interactions(lunar_data)
         total_offset = self.calculate_total_solar_offset_minutes(target_date)
         hours_data = self.calculate_wu_shu_dun_hours(day_gan, day_zhi, month_zhi, total_offset)
+        monthly_stars = self.calculate_monthly_flying_stars(year_zhi, month_zhi)
+        god_dirs = self.get_daily_god_directions(day_gan)
 
-        # 黄金效率时与避冲时严格在日间活动窗口 (07:00-21:00) 内筛选
+        # 黄金效率时（Top 2）与避冲时严格在日间活动窗口 (07:00-21:00) 内筛选
         daytime_hours = [h for h in hours_data if h["is_daytime"] and not h["is_day_breaker"]]
         if not daytime_hours:
             daytime_hours = [h for h in hours_data if h["is_daytime"]]
 
         sorted_daytime = sorted(daytime_hours, key=lambda x: x["score"], reverse=True)
         best_hour = sorted_daytime[0]
+        second_best_hour = sorted_daytime[1] if len(sorted_daytime) > 1 else None
 
         all_daytime_for_worst = [h for h in hours_data if h["is_daytime"]]
         worst_hour = sorted(all_daytime_for_worst, key=lambda x: x["score"])[0]
@@ -774,6 +850,14 @@ class DailyBaziEngine:
         worst_tags = f" [{'/'.join(worst_hour['bad_tags'])}]" if worst_hour["bad_tags"] else ""
 
         golden_hour_str = f"{best_hour['zhi_name']}（{best_hour['gan_zhi']}{best_tags} · {best_hour['time_desc']}）"
+        second_hour_str = ""
+        second_md_line = ""
+        second_bark_line = ""
+        if second_best_hour:
+            s_tags = f" [{'/'.join(second_best_hour['good_tags'])}]" if second_best_hour["good_tags"] else ""
+            second_hour_str = f"{second_best_hour['zhi_name']}（{second_best_hour['gan_zhi']}{s_tags} · {second_best_hour['time_desc']}）"
+            second_md_line = f"\n* **✨ 次选行动吉时**：{second_hour_str} —— 气场顺遂，利沟通谈判、社交约会或推进事务。"
+            second_bark_line = f"\n✨ 次选行动：{second_hour_str}"
         caution_hour_str = f"{worst_hour['zhi_name']}（{worst_hour['gan_zhi']}{worst_tags} · {worst_hour['time_desc']}）"
 
         fs_energy = self.calculate_fengshui_and_liaofan(lunar_data, eval_data)
@@ -799,8 +883,14 @@ class DailyBaziEngine:
         events_str = "；".join(events) if events else "原局地支安稳无大刑冲，气场中和从容。"
         cautions_str = "；".join(eval_data["cautions"]) if eval_data["cautions"] else "守住边界，不逞一时之气即可安然无虞。"
 
-        # 1. 生成 Obsidian 归档用标准 Markdown
-        md_content = f"""# 📅 每日命理指引 · {lunar_data['solar_date']}
+        god_dir_line = f"财神 {god_dirs['wealth']} ｜ 喜神桃花 {god_dirs['joy']} ｜ 贵人 {god_dirs['noble']}"
+        monthly_star_line = (
+            f"本月流月飞星：一白财桃在【{monthly_stars['yi_bai_dir']}】、六白贵人在【{monthly_stars['liu_bai_dir']}】、"
+            f"五黄避煞【{monthly_stars['wu_huang_dir']}】"
+        )
+
+        # 1. 生成 Obsidian 归档用标准 Markdown (v4.0)
+        md_content = f"""# 📅 每日命理指引 · {lunar_data['solar_date']} (v4.0)
 **干支历元**：{lunar_data['year_gz']}年 · {lunar_data['month_gz']}月 · {lunar_data['day_gz']}日（农历{lunar_data['lunar_text']} · {eval_data['decade_desc']}）
 **气场评级**：{badge} {stars_str} (综合能量分: {eval_data['score_num']})
 **值日十神**：{eval_data['ten_god']}值日 · 天干五行属{eval_data['day_element']} (月令衰旺加权: {eval_data['gan_power']:.2f})
@@ -813,11 +903,15 @@ class DailyBaziEngine:
 
 ### ❤️ 【爱情与人际指引】
 * **相处状态**：{eval_data['romance_status']}
-* **沟通指南**：对方若有琐碎唠叨，多微笑点头、不争辩对错，以柔克刚胜过千言万语。
+* **沟通指南**：遇分歧坦诚摊开说、不冷战憋气，多微笑倾听，以柔克刚胜过千言万语。
 
 ### ⏰ 【日间吉凶时辰精算 (五鼠遁 · 滤除日破 · EOT校准)】
-* **🌟 日间黄金效率时**：{golden_hour_str} —— 头脑最清晰，利深度研究、推演模型与关键决策。
+* **🌟 第一黄金吉时**：{golden_hour_str} —— 头脑最清晰，利深度研究、推演模型与关键决策。{second_md_line}
 * **⚠️ 日间慎言避冲时**：{caution_hour_str} —— 气场激荡易生分歧，宜静坐喝茶、少做重大决断。{night_bonus_str}
+
+### 🧭 【今日吉神方位与流月玄空飞星 (v4.0)】
+* **当日神位**：{god_dir_line}
+* **流月飞星**：{monthly_star_line}
 
 ### ⚠️ 【今日避坑清单与神煞交会】
 * **星曜交会**：{events_str}
@@ -839,7 +933,7 @@ class DailyBaziEngine:
 > {quote}
 """
 
-        # 2. 生成专为 iOS Bark 原生通知优化的高颜值纯文本卡片（无裸露 ### 与 ** 符号）
+        # 2. 生成专为 iOS Bark 原生通知优化的高颜值纯文本卡片 (v4.0)
         night_bark_line = f"\n🌙 晚间复盘：{hai_hour['zhi_name']}（{hai_hour['gan_zhi']}{hai_tags_str} · {hai_hour['time_desc']}）" if night_bonus_str else ""
         bark_clean_body = f"""{badge} {stars_str} (能量分: {eval_data['score_num']})
 📅 {lunar_data['solar_date']} ({lunar_data['year_gz']}年 {lunar_data['month_gz']}月 {lunar_data['day_gz']}日 · 农历{lunar_data['lunar_text']})
@@ -851,11 +945,15 @@ class DailyBaziEngine:
 
 ❤️【爱情与人际指引】
 • 状态：{eval_data['romance_status']}
-• 心法：多微笑倾听，少争辩对错，以柔克刚。
+• 心法：坦诚沟通不冷战，多微笑倾听，以柔克刚。
 
-⏰【吉凶时辰 (已滤日破·贵阳真太阳时)】
-🌟 黄金效率：{golden_hour_str}
+⏰【最佳行动吉时 (已滤日破·贵阳真太阳时)】
+🌟 第一吉时：{golden_hour_str}{second_bark_line}
 ⚠️ 慎言避冲：{caution_hour_str}{night_bark_line}
+
+🧭【今日神位与流月飞星】
+• 神位：{god_dir_line}
+• 飞星：一白财桃{monthly_stars['yi_bai_dir']} ｜ 六白贵人{monthly_stars['liu_bai_dir']} ｜ 五黄避{monthly_stars['wu_huang_dir']}
 
 ⚠️【今日避坑与神煞雷达】
 • 交会：{events_str}
@@ -874,6 +972,16 @@ class DailyBaziEngine:
 
         return {
             "date_str": lunar_data["solar_date"],
+            "lunar_data": lunar_data,
+            "eval_data": eval_data,
+            "golden_hour": golden_hour_str,
+            "second_hour": second_hour_str,
+            "caution_hour": caution_hour_str,
+            "god_directions": god_dirs,
+            "monthly_stars": monthly_stars,
+            "fs_energy": fs_energy,
+            "quote": quote,
+            "badge": badge,
             "title": f"📅 今日运势 · {lunar_data['day_gz']}日 {badge[:9]}",
             "body_md": md_content.strip(),
             "body_bark": bark_clean_body.strip(),
